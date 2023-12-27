@@ -1,0 +1,317 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+
+#define MAXSIZE 200
+#define INTMAX 200000000
+typedef struct GNode* Graph;
+struct GNode {
+    int matrix[MAXSIZE][MAXSIZE];
+    int edge;
+    int node;
+    int inDegree[MAXSIZE];
+    int outDegree[MAXSIZE];
+    int earliest[MAXSIZE];
+    int latest[MAXSIZE];
+};
+
+typedef struct LNode* List;
+struct LNode {
+    int value;
+    List next;
+};
+
+int min(int a, int b);
+int max(int a, int b);
+
+Graph Init(void);
+void LogArray(int* A, int N);
+void LogGraph(Graph G);
+void Log2D(int** A, int size, int* colSizes);
+
+void InsertEdge(Graph G, int v1, int v2, int weight);
+void Read(Graph G, int M);
+void calInDegree(Graph G);
+void calOutDegree(Graph G);
+bool cal_earliest(Graph G);
+void calLatest(Graph G);
+
+List NewLNode(int value, List next);
+void Push(List dummy, int value);
+int Pop(List dummy, List* ptr);
+void Enqueue(List* ptrRear, int value);
+void clear(int* A, int size);
+void cpy(int* A, int* B, int N);
+int** criticallPath(Graph G);
+void DFS(Graph G, int cur, int* set, int setSize, int** res, int* resSize, int* colSizes);
+void LogCritical(int** res, int resSize, int* colSizes);
+
+
+int main()
+{
+    int N, M, rank[MAXSIZE];
+    Graph G = Init();
+    scanf("%d %d", &N, &M);
+    G->node = N;
+    //LogGraph(G);
+    //printf("\n");
+    Read(G, M);
+    //LogGraph(G);
+    calInDegree(G);
+    //LogGraph(G);
+    int time = cal_earliest(G); 
+    if (time){
+        int max = -1;
+        for (int i = 0; i < G->node; i ++){
+            if (G->earliest[i] > max) max = G->earliest[i];
+        }
+        printf("%d\n", max);
+    } else {
+        printf("Impossible\n");
+    }
+    //LogGraph(G);
+    ///calLatest(G);
+    //LogGraph(G);
+    //criticallPath(G);
+    
+    return 0;
+}
+
+void LogCritical(int** res, int resSize, int* colSizes){
+    int i, j;
+    for (i = 0; i < resSize; i ++){
+        for (j = 1; j < colSizes[i]; j ++){
+            printf("%d->%d\n", (res[i])[j - 1], (res[i])[j] );
+        }
+    }
+}
+
+int** criticallPath(Graph G){
+    int** res = (int**)malloc(sizeof(int*)* MAXSIZE);
+    int* colSizes = (int*)malloc(sizeof(int) * MAXSIZE);
+    int resSize = 0, i, max = -1;
+    int set[MAXSIZE];
+    for (i = 1; i <= G->node; i ++){
+        if (G->inDegree[i] == 0){
+            DFS(G, i, set, 0, res, &resSize, colSizes);
+        }
+    }
+    //Log2D(res, resSize, colSizes);
+    for (int i = 1; i <= G->node ; i ++){
+        if (max < G->earliest[i])
+            max = G->earliest[i];
+    }
+    printf("%d\n", max);
+    LogCritical(res, resSize, colSizes);
+}
+
+void DFS(Graph G, int cur, int* set, int setSize, int** res, int* resSize, int* colSizes){
+    int i;
+    set[setSize++] = cur;
+    if (G->outDegree[cur] == 0){
+        colSizes[*resSize] = setSize;
+        res[*resSize] = (int*)malloc(sizeof(int) * MAXSIZE);
+        cpy(res[(*resSize)++], set, setSize);
+        return ;
+    }
+    for (i = 1; i <= G->node; i ++){
+        if (G->matrix[cur][i] >= 0 && G->earliest[i] == G->latest[i]){
+            DFS(G, i, set, setSize, res, resSize, colSizes);
+        }
+    }
+}
+
+void calLatest(Graph G){
+    int i, j, cur, t[MAXSIZE];
+    List dummy = NewLNode(0, NULL);
+    List rear = dummy;
+    cpy(t, G->outDegree, G->node + 1);
+    for (i = 1; i <= G->node; i ++){
+        if (G->outDegree[i] == 0){
+            Enqueue(&rear, i);
+            G->latest[i] = G->earliest[i];
+        }
+    }
+    
+    while (dummy->next){
+        cur = Pop(dummy, &rear);
+        for (j = 0; j <= G->node; j ++){
+            if (G->matrix[j][cur] >= 0){
+                G->latest[j] = min(G->latest[cur] - G->matrix[j][cur], G->latest[j]);
+                t[j]--;
+                if (t[j] == 0){
+                    Enqueue(&rear, j);
+                }
+            }
+        }
+    }
+}
+
+bool cal_earliest(Graph G){
+    int i, j, cur, t[MAXSIZE], cnt = 0;
+    List dummy = NewLNode(0, NULL);
+    List rear = dummy;
+    cpy(t, G->inDegree, G->node + 1);
+    for (i = 0; i < G->node; i++){
+        if (G->inDegree[i] == 0){
+            Enqueue(&rear, i);
+            cnt++;
+        }
+    }
+    while (dummy->next){
+        cur = Pop(dummy, &rear);
+        for (j = 0; j < G->node ; j ++){
+            if (G->matrix[cur][j] >= 0){
+                G->earliest[j] = max(G->matrix[cur][j] + G->earliest[cur], G->earliest[j]);
+                t[j]--;
+                if (t[j] == 0){
+                    Enqueue(&rear, j);
+                    cnt++;
+                }
+            }
+        }
+    }
+    return cnt == G->node;
+}
+
+void calInDegree(Graph G){
+    int i, j;
+    for (i = 0; i <= G->node; i ++){
+        for (j = 0; j <= G->node; j ++){
+            if (G->matrix[i][j] >= 0){
+                G->outDegree[i] ++;
+                G->inDegree[j] ++;
+            }
+        }
+    }
+}
+
+
+
+void Read(Graph G, int M){
+    int i, v1, v2, weight;
+    for (i = 0; i < M; i ++){
+        scanf("%d %d %d", &v1, &v2, &weight);
+        InsertEdge(G, v1, v2, weight);
+    }
+}
+
+void LogGraph(Graph G){
+    int i, j;
+    printf("edge: %d, node: %d\n", G->edge, G->node);
+    for (i = 0; i <= G->node; i ++){
+        for (j = 0; j <= G->node; j ++){
+            printf("%d ", G->matrix[i][j]);
+        }
+        printf("\n");
+    }
+    printf("InDegree:\n");
+    for (i = 0; i <= G->node ; i ++){
+        printf("%d ", G->inDegree[i]);
+    }
+    printf("\n");
+    printf("OutDegree:\n");
+    LogArray(G->outDegree, G->node + 1);
+    printf("earliest:\n");
+    for (i = 0; i <= G->node; i ++){
+        printf("%d ", G->earliest[i]);
+    }
+    printf("\nlatest:\n");
+    for (i = 0; i <= G->node;i ++){
+        printf("%d ", G->latest[i]);
+    }
+    printf("\n");
+}
+
+Graph Init(void){
+    int i, j;
+    Graph G = (Graph)malloc(sizeof(struct GNode));
+    G->edge = 0;
+    G->node = 0;
+    for (i = 0; i < MAXSIZE; i ++){
+        for (j = 0; j < MAXSIZE; j ++){
+            G->matrix[i][j] = -1;
+        }
+    }
+
+    for (i = 0; i < MAXSIZE; i ++){
+        G->inDegree[i] = 0;
+        G->earliest[i] = 0;
+        G->latest[i] = INTMAX;
+        G->outDegree[i] = 0;
+    }
+
+    return G;
+}
+
+void InsertEdge(Graph G, int v1, int v2, int weight){
+    G->matrix[v1][v2] = weight;
+    //G->matrix[v2][v1] = weight;
+    G->edge ++;
+}
+
+List NewLNode(int value, List next){
+    List res = (List)malloc(sizeof(struct LNode));
+    res->value = value;
+    res->next = next;
+    return res;
+}
+
+void Push(List dummy, int value){
+    dummy->next = NewLNode(value, dummy->next);
+}
+
+int Pop(List dummy, List* ptrRear){
+    if (!dummy->next){
+        printf("empty\n");
+        return -1;
+    }
+    List temp = dummy->next;
+    dummy->next = temp->next;
+    if (!dummy->next){
+        *ptrRear = dummy;
+    }
+    int res = temp->value;
+    free(temp);
+    return res;
+}
+
+void Enqueue(List* ptrRear, int value){
+    (*ptrRear)->next = NewLNode(value, NULL);
+    (*ptrRear) = (*ptrRear)->next;
+}
+
+void clear(int* A, int size){
+    int i;
+    for (i = 0; i < size; i ++){
+        A[i] = 0;
+    }
+}
+
+int max(int a, int b){
+    return a>b? a: b;
+}
+
+int min(int a, int b){
+    return a<b? a: b;
+}
+
+void cpy(int* d, int* s, int N){
+    int i;
+    for (i = 0; i < N; i ++) d[i] = s[i];
+}
+
+void LogArray(int* A, int N){
+    if (N) printf("%d", A[0]);
+    for (int i = 1 ; i< N; i ++) 
+        printf(" %d", A[i]);
+    printf("\n");
+}
+
+void Log2D(int** A, int size, int* colSizes){
+    int i;
+    for (i = 0; i < size; i ++){
+        LogArray(A[i], colSizes[i]);
+    }
+}
